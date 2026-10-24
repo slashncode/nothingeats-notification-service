@@ -4,7 +4,7 @@ plugins {
 }
 
 application {
-    mainClass = "io.github.slashncode.nothingeats.example.app.MainKt"
+    mainClass = "io.github.slashncode.nothingeats.notification.app.MainKt"
 }
 
 dependencies {
@@ -12,5 +12,6 @@ dependencies {
     implementation(project(":adapters"))
 
     testImplementation(libs.nothingeats.platform.testing)
+    testImplementation(testFixtures(project(":adapters")))
     testImplementation(libs.konsist)
 }

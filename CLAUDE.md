@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Template for NothingEats Kotlin services. The cross-repo plan and session rules live in `../CLAUDE.md` (workspace root), if present — read it first.
+Notification service of NothingEats (mails now; web push and SSE later). Created from the Kotlin service template. The cross-repo plan and session rules live in `../CLAUDE.md` (workspace root), if present — read it first.
 
 ## Commands
 
@@ -17,3 +17,5 @@ Template for NothingEats Kotlin services. The cross-repo plan and session rules 
 - Schema changes are new Flyway files in `adapters/src/main/resources/db/migration`; never edit an applied migration. Serving pods refuse to start with pending migrations.
 - Repositories map constraint violations by SQLSTATE and constraint name (helpers in `platform-persistence`).
 - The platform (`../nothingeats-kotlin-platform`) is used as a composite build when checked out; changes there are picked up without publishing.
+- Never log full email addresses or mail bodies; deliveries keep only the recipient domain.
+- Event handlers are tolerant readers of other services' contracts: decode only the fields you need.

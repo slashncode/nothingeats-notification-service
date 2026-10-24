@@ -59,6 +59,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "nothingeats-example-service"
+rootProject.name = "nothingeats-notification-service"
 
 include("domain", "application", "adapters", "app")

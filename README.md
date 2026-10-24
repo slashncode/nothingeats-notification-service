@@ -1,52 +1,30 @@
-# nothingeats-kotlin-service-template
+# nothingeats-notification-service
 
-Template for a NothingEats bounded-context service: Kotlin, Ktor, hexagonal Gradle modules, kotlin-inject, Postgres. It builds, tests and runs out of the box with a small `Item` example that shows every pattern.
+Outbound channels of [NothingEats](https://github.com/slashncode/nothingeats). Phase 1: mails that follow from identity events. Later: web push and the server-sent event stream for live updates in the browser.
 
-Part of [NothingEats](https://github.com/slashncode/nothingeats).
+## Mails
 
-## Create a service
+| Event (`identity.user.v1`) | Mail |
+|---|---|
+| `nothingeats.identity.user.registered.v1` | Confirm your address (link to `/verify?token=…` in the web app) |
+| `nothingeats.identity.user.registration-attempted.v1` | Someone tried to sign up with your address |
+| `nothingeats.identity.user.verified.v1` | Welcome |
 
-1. **Use this template** on GitHub → `nothingeats-<context>-service`, clone it next to the other repos.
-2. `scripts/init-service.sh <context>` renames packages, project and image. CI pushes a signed image on main automatically in every repo created from the template.
-3. Replace the `Item` example with the real domain.
+German and English, plain text plus HTML. SMTP to Mailpit locally (`http://mail.nothingeats.localhost`), Resend in production (planned).
 
-## Modules
+## Guarantees
 
-| Module | Contains | May depend on |
-|---|---|---|
-| `domain` | Aggregates, value objects, domain exceptions | nothing (pure Kotlin) |
-| `application` | Use cases, ports (`ItemRepository`), test fixtures (in-memory port implementations) | `domain`, `platform-core` |
-| `adapters` | Ktor routes, Exposed repositories, Flyway migrations (`db/migration`) | `application`, `platform-http`, `platform-persistence` |
-| `app` | kotlin-inject composition root, typed config, `main`, logging config | everything |
-
-The module graph enforces the dependency direction at compile time; Konsist tests in `app` cover the rest (domain imports, HTTP adapters never touching persistence).
+- The Kafka consumer (`notification-service` group) writes an inbox row and the delivery log in one transaction with the send: a mail goes out at least once and is not repeated after success.
+- Unknown event types and fields are ignored (tolerant reader); failing events are retried, then parked in `notification-service.dlq`.
+- Deliveries are logged with template and recipient domain, never the full address. Every send is a PostHog `email_sent` event for the funnel to `email_verified`.
 
 ## Run
 
-One image, three modes: `serve` (default), `migrate`, `cron <task>`.
-
 ```bash
-./gradlew build                     # compile, ktlint, tests (Docker needed for Testcontainers)
-
-export DATABASE__URL=jdbc:postgresql://localhost:15432/example DATABASE__USER=example DATABASE__PASSWORD=...
-./gradlew :app:run --args=migrate   # apply migrations
-./gradlew :app:run                  # serve on :8080, readable logs
-
-# In the k3d cluster, from the hub repo: Flux steps aside, Tilt rebuilds and redeploys on every change
-just dev <context>-service           # stop with: just dev-stop <context>-service
-
-./gradlew :app:jibDockerBuild -Djib.from.platforms=linux/arm64   # local image
+./gradlew build    # tests need Docker (Postgres, Kafka, Mailpit via Testcontainers)
 ```
 
-Configuration comes from env vars only: `__` nests, `_` separates words (`HTTP__PORT`, `DATABASE__MAXIMUM_POOL_SIZE`, `LIFECYCLE__DRAIN_DELAY`). Missing values stop the service at startup with a full report.
-
-## What the example shows
-
-- Domain rules as plain exceptions (`InvalidItemName`, `ItemNameTaken`), mapped to `AppError` in the use cases.
-- A unique constraint mapped to a domain exception by SQLSTATE and constraint name, surfacing as `409 ITEM_NAME_TAKEN`.
-- RFC 9457 problem responses with stable codes and the request id.
-- Lifecycle components, health checks and routes collected with `@IntoSet` in `ServiceComponent`.
-- A smoke test that wires the real composition root against real Postgres.
+In the k3d cluster: `just dev notification-service` from the hub repo.
 
 ## License
 
