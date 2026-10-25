@@ -17,6 +17,7 @@ internal data class IdentityUserEvent(
     val email: String,
     val locale: String? = null,
     val verificationToken: String? = null,
+    val resetToken: String? = null,
 )
 
 class IdentityEventsHandler(
@@ -45,6 +46,15 @@ class IdentityEventsHandler(
                 )
             REGISTRATION_ATTEMPTED -> mails.registrationAttempted(event.id, user.userId, user.email, language)
             VERIFIED -> mails.welcome(event.id, user.userId, user.email, language)
+            PASSWORD_RESET_REQUESTED ->
+                mails.passwordReset(
+                    event.id,
+                    user.userId,
+                    user.email,
+                    language,
+                    requireNotNull(user.resetToken) { "password reset event without token" },
+                )
+            PASSWORD_CHANGED -> mails.passwordChanged(event.id, user.userId, user.email, language)
         }
     }
 
@@ -52,6 +62,8 @@ class IdentityEventsHandler(
         const val REGISTERED = "nothingeats.identity.user.registered.v1"
         const val REGISTRATION_ATTEMPTED = "nothingeats.identity.user.registration-attempted.v1"
         const val VERIFIED = "nothingeats.identity.user.verified.v1"
-        val HANDLED = setOf(REGISTERED, REGISTRATION_ATTEMPTED, VERIFIED)
+        const val PASSWORD_RESET_REQUESTED = "nothingeats.identity.user.password-reset-requested.v1"
+        const val PASSWORD_CHANGED = "nothingeats.identity.user.password-changed.v1"
+        val HANDLED = setOf(REGISTERED, REGISTRATION_ATTEMPTED, VERIFIED, PASSWORD_RESET_REQUESTED, PASSWORD_CHANGED)
     }
 }

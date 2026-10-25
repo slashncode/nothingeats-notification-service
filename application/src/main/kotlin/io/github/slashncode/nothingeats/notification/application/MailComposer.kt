@@ -37,6 +37,23 @@ class MailComposer(
         language: Language,
     ) = compose(to, Template.WELCOME, language, links.webBaseUrl)
 
+    fun passwordReset(
+        to: String,
+        language: Language,
+        token: String,
+    ) = compose(
+        to,
+        Template.PASSWORD_RESET,
+        language,
+        "${links.webBaseUrl}/reset-password?token=${URLEncoder.encode(token, Charsets.UTF_8)}",
+    )
+
+    /** Ends with a way out for the owner if someone else changed it. */
+    fun passwordChanged(
+        to: String,
+        language: Language,
+    ) = compose(to, Template.PASSWORD_CHANGED, language, "${links.webBaseUrl}/forgot-password")
+
     private fun compose(
         to: String,
         template: Template,
@@ -71,54 +88,95 @@ class MailComposer(
         return Mail(to = to, subject = copy.subject, text = text, html = html)
     }
 
+    // Exhaustive per template, so a new template cannot fall back to another mail's text.
     private fun copy(
         template: Template,
         language: Language,
-    ): Copy =
-        when (template to language) {
-            Template.VERIFY_EMAIL to Language.DE ->
-                Copy(
-                    "Bitte bestätige deine E-Mail-Adresse",
-                    "Fast geschafft!",
-                    "Bestätige deine E-Mail-Adresse, dann kannst du bei NothingEats alles bestellen – und nichts essen. Der Link gilt 24 Stunden.",
-                    "E-Mail-Adresse bestätigen",
-                )
-            Template.VERIFY_EMAIL to Language.EN ->
-                Copy(
-                    "Confirm your email address",
-                    "Almost there!",
-                    "Confirm your email address and start ordering everything on NothingEats – and eating nothing. The link is valid for 24 hours.",
-                    "Confirm email address",
-                )
-            Template.REGISTRATION_ATTEMPTED to Language.DE ->
-                Copy(
-                    "Jemand wollte sich mit deiner Adresse registrieren",
-                    "Du hast schon ein Konto",
-                    "Gerade wollte sich jemand mit deiner E-Mail-Adresse neu registrieren. Warst du das? Dann melde dich einfach an. Wenn nicht, kannst du diese Mail ignorieren.",
-                    "Anmelden",
-                )
-            Template.REGISTRATION_ATTEMPTED to Language.EN ->
-                Copy(
-                    "Someone tried to sign up with your address",
-                    "You already have an account",
-                    "Someone just tried to create a new account with your email address. Was it you? Then simply log in. If not, you can ignore this mail.",
-                    "Log in",
-                )
-            Template.WELCOME to Language.DE ->
-                Copy(
-                    "Willkommen bei NothingEats",
-                    "Willkommen!",
-                    "Deine Adresse ist bestätigt. Bestell alles, worauf du Lust hast – geliefert wird nichts, gegessen auch nicht.",
-                    "Jetzt stöbern",
-                )
-            else ->
-                Copy(
-                    "Welcome to NothingEats",
-                    "Welcome!",
-                    "Your address is confirmed. Order everything you crave – nothing gets delivered, nothing gets eaten.",
-                    "Start browsing",
-                )
+    ): Copy {
+        val de = language == Language.DE
+        return when (template) {
+            Template.VERIFY_EMAIL ->
+                if (de) {
+                    Copy(
+                        "Bitte bestätige deine E-Mail-Adresse",
+                        "Fast geschafft!",
+                        "Bestätige deine E-Mail-Adresse, dann kannst du bei NothingEats alles bestellen – und nichts essen. Der Link gilt 24 Stunden.",
+                        "E-Mail-Adresse bestätigen",
+                    )
+                } else {
+                    Copy(
+                        "Confirm your email address",
+                        "Almost there!",
+                        "Confirm your email address and start ordering everything on NothingEats – and eating nothing. The link is valid for 24 hours.",
+                        "Confirm email address",
+                    )
+                }
+            Template.REGISTRATION_ATTEMPTED ->
+                if (de) {
+                    Copy(
+                        "Jemand wollte sich mit deiner Adresse registrieren",
+                        "Du hast schon ein Konto",
+                        "Gerade wollte sich jemand mit deiner E-Mail-Adresse neu registrieren. Warst du das? Dann melde dich einfach an. Wenn nicht, kannst du diese Mail ignorieren.",
+                        "Anmelden",
+                    )
+                } else {
+                    Copy(
+                        "Someone tried to sign up with your address",
+                        "You already have an account",
+                        "Someone just tried to create a new account with your email address. Was it you? Then simply log in. If not, you can ignore this mail.",
+                        "Log in",
+                    )
+                }
+            Template.WELCOME ->
+                if (de) {
+                    Copy(
+                        "Willkommen bei NothingEats",
+                        "Willkommen!",
+                        "Deine Adresse ist bestätigt. Bestell alles, worauf du Lust hast – geliefert wird nichts, gegessen auch nicht.",
+                        "Jetzt stöbern",
+                    )
+                } else {
+                    Copy(
+                        "Welcome to NothingEats",
+                        "Welcome!",
+                        "Your address is confirmed. Order everything you crave – nothing gets delivered, nothing gets eaten.",
+                        "Start browsing",
+                    )
+                }
+            Template.PASSWORD_RESET ->
+                if (de) {
+                    Copy(
+                        "Neues Passwort für NothingEats",
+                        "Passwort vergessen?",
+                        "Kein Problem: Über den Link legst du ein neues Passwort fest. Er gilt eine Stunde. Wenn du kein neues Passwort angefordert hast, ignoriere diese Mail einfach – dein Passwort bleibt, wie es ist.",
+                        "Neues Passwort festlegen",
+                    )
+                } else {
+                    Copy(
+                        "A new password for NothingEats",
+                        "Forgot your password?",
+                        "No problem: use the link to choose a new password. It is valid for one hour. If you didn't ask for a new password, just ignore this mail – your password stays as it is.",
+                        "Choose a new password",
+                    )
+                }
+            Template.PASSWORD_CHANGED ->
+                if (de) {
+                    Copy(
+                        "Dein Passwort wurde geändert",
+                        "Passwort geändert",
+                        "Das Passwort deines NothingEats-Kontos wurde gerade geändert, und alle Geräte wurden abgemeldet. Warst du das nicht? Dann setz dein Passwort sofort zurück.",
+                        "Passwort zurücksetzen",
+                    )
+                } else {
+                    Copy(
+                        "Your password was changed",
+                        "Password changed",
+                        "The password of your NothingEats account was just changed, and every device was logged out. Wasn't you? Then reset your password right away.",
+                        "Reset password",
+                    )
+                }
         }
+    }
 
     private companion object {
         const val SIGNATURE = "NothingEats – Order everything. Eat nothing."

@@ -45,4 +45,30 @@ class UserMailsTest :
                 listOf("email_sent" to "verify_email", "email_sent" to "registration_attempted")
             analytics.events.first().distinctId shouldBe "user-1"
         }
+
+        test("password mails: reset link with the encoded token, and a way out after a change") {
+            val reset = composer.passwordReset("ghost@nothingeats.dev", Language.DE, "a+b")
+            val changed = composer.passwordChanged("ghost@nothingeats.dev", Language.EN)
+
+            reset.subject shouldBe "Neues Passwort für NothingEats"
+            reset.text shouldContain "http://nothingeats.localhost/reset-password?token=a%2Bb"
+            changed.subject shouldBe "Your password was changed"
+            changed.text shouldContain "http://nothingeats.localhost/forgot-password"
+        }
+
+        test("every template has its own text in both languages") {
+            val subjects =
+                Template.entries.flatMap { template ->
+                    Language.entries.map { language ->
+                        when (template) {
+                            Template.VERIFY_EMAIL -> composer.verifyEmail("a@b.de", language, "t")
+                            Template.REGISTRATION_ATTEMPTED -> composer.registrationAttempted("a@b.de", language)
+                            Template.WELCOME -> composer.welcome("a@b.de", language)
+                            Template.PASSWORD_RESET -> composer.passwordReset("a@b.de", language, "t")
+                            Template.PASSWORD_CHANGED -> composer.passwordChanged("a@b.de", language)
+                        }.subject
+                    }
+                }
+            subjects.toSet().size shouldBe subjects.size
+        }
     })

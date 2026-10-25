@@ -19,6 +19,8 @@ enum class Template(
     VERIFY_EMAIL("verify_email"),
     REGISTRATION_ATTEMPTED("registration_attempted"),
     WELCOME("welcome"),
+    PASSWORD_RESET("password_reset"),
+    PASSWORD_CHANGED("password_changed"),
 }
 
 data class Mail(

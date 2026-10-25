@@ -49,6 +49,21 @@ class UserMails(
         language: Language,
     ) = send(eventId, userId, Template.WELCOME, composer.welcome(email, language))
 
+    suspend fun passwordReset(
+        eventId: String,
+        userId: String,
+        email: String,
+        language: Language,
+        token: String,
+    ) = send(eventId, userId, Template.PASSWORD_RESET, composer.passwordReset(email, language, token))
+
+    suspend fun passwordChanged(
+        eventId: String,
+        userId: String,
+        email: String,
+        language: Language,
+    ) = send(eventId, userId, Template.PASSWORD_CHANGED, composer.passwordChanged(email, language))
+
     private suspend fun send(
         eventId: String,
         userId: String,
