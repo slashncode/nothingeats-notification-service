@@ -57,6 +57,14 @@ class UserMails(
         token: String,
     ) = send(eventId, userId, Template.PASSWORD_RESET, composer.passwordReset(email, language, token))
 
+    suspend fun magicLink(
+        eventId: String,
+        userId: String,
+        email: String,
+        language: Language,
+        token: String,
+    ) = send(eventId, userId, Template.MAGIC_LINK, composer.magicLink(email, language, token))
+
     suspend fun passwordChanged(
         eventId: String,
         userId: String,

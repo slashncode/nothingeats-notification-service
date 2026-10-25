@@ -54,6 +54,8 @@ class UserMailsTest :
             reset.text shouldContain "http://nothingeats.localhost/reset-password?token=a%2Bb"
             changed.subject shouldBe "Your password was changed"
             changed.text shouldContain "http://nothingeats.localhost/forgot-password"
+            composer.magicLink("ghost@nothingeats.dev", Language.DE, "x/y").text shouldContain
+                "http://nothingeats.localhost/magic-login?token=x%2Fy"
         }
 
         test("every template has its own text in both languages") {
@@ -66,6 +68,7 @@ class UserMailsTest :
                             Template.WELCOME -> composer.welcome("a@b.de", language)
                             Template.PASSWORD_RESET -> composer.passwordReset("a@b.de", language, "t")
                             Template.PASSWORD_CHANGED -> composer.passwordChanged("a@b.de", language)
+                            Template.MAGIC_LINK -> composer.magicLink("a@b.de", language, "t")
                         }.subject
                     }
                 }

@@ -48,6 +48,12 @@ class MailComposer(
         "${links.webBaseUrl}/reset-password?token=${URLEncoder.encode(token, Charsets.UTF_8)}",
     )
 
+    fun magicLink(
+        to: String,
+        language: Language,
+        token: String,
+    ) = compose(to, Template.MAGIC_LINK, language, "${links.webBaseUrl}/magic-login?token=${URLEncoder.encode(token, Charsets.UTF_8)}")
+
     /** Ends with a way out for the owner if someone else changed it. */
     fun passwordChanged(
         to: String,
@@ -157,6 +163,22 @@ class MailComposer(
                         "Forgot your password?",
                         "No problem: use the link to choose a new password. It is valid for one hour. If you didn't ask for a new password, just ignore this mail – your password stays as it is.",
                         "Choose a new password",
+                    )
+                }
+            Template.MAGIC_LINK ->
+                if (de) {
+                    Copy(
+                        "Dein Anmeldelink für NothingEats",
+                        "Einfach anmelden",
+                        "Mit diesem Link meldest du dich ohne Passwort an. Er gilt 15 Minuten und nur ein einziges Mal. Wenn du keinen Link angefordert hast, ignoriere diese Mail einfach.",
+                        "Jetzt anmelden",
+                    )
+                } else {
+                    Copy(
+                        "Your NothingEats login link",
+                        "Log in, no password",
+                        "Use this link to log in without a password. It is valid for 15 minutes and only once. If you didn't ask for a link, just ignore this mail.",
+                        "Log in now",
                     )
                 }
             Template.PASSWORD_CHANGED ->

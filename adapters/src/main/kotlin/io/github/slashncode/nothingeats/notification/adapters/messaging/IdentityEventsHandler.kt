@@ -18,6 +18,7 @@ internal data class IdentityUserEvent(
     val locale: String? = null,
     val verificationToken: String? = null,
     val resetToken: String? = null,
+    val magicToken: String? = null,
 )
 
 class IdentityEventsHandler(
@@ -29,6 +30,11 @@ class IdentityEventsHandler(
 
     override suspend fun handle(event: CloudEvent) {
         val type = event.type
+        if (type == DELETED) {
+            // Nothing to erase: deliveries keep only the recipient's domain, never the address or the user id.
+            log.debug("Account deleted; this service holds no personal data about it")
+            return
+        }
         if (type !in HANDLED) {
             log.debug("Ignoring {}", type)
             return
@@ -55,6 +61,14 @@ class IdentityEventsHandler(
                     requireNotNull(user.resetToken) { "password reset event without token" },
                 )
             PASSWORD_CHANGED -> mails.passwordChanged(event.id, user.userId, user.email, language)
+            MAGIC_LINK_REQUESTED ->
+                mails.magicLink(
+                    event.id,
+                    user.userId,
+                    user.email,
+                    language,
+                    requireNotNull(user.magicToken) { "magic link event without token" },
+                )
         }
     }
 
@@ -64,6 +78,8 @@ class IdentityEventsHandler(
         const val VERIFIED = "nothingeats.identity.user.verified.v1"
         const val PASSWORD_RESET_REQUESTED = "nothingeats.identity.user.password-reset-requested.v1"
         const val PASSWORD_CHANGED = "nothingeats.identity.user.password-changed.v1"
-        val HANDLED = setOf(REGISTERED, REGISTRATION_ATTEMPTED, VERIFIED, PASSWORD_RESET_REQUESTED, PASSWORD_CHANGED)
+        const val MAGIC_LINK_REQUESTED = "nothingeats.identity.user.magic-link-requested.v1"
+        const val DELETED = "nothingeats.identity.user.deleted.v1"
+        val HANDLED = setOf(REGISTERED, REGISTRATION_ATTEMPTED, VERIFIED, PASSWORD_RESET_REQUESTED, PASSWORD_CHANGED, MAGIC_LINK_REQUESTED)
     }
 }
