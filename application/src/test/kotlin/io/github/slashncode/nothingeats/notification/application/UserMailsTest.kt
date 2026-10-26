@@ -7,6 +7,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import java.time.Instant
 
 class UserMailsTest :
     FunSpec({
@@ -69,6 +70,22 @@ class UserMailsTest :
                             Template.PASSWORD_RESET -> composer.passwordReset("a@b.de", language, "t")
                             Template.PASSWORD_CHANGED -> composer.passwordChanged("a@b.de", language)
                             Template.MAGIC_LINK -> composer.magicLink("a@b.de", language, "t")
+                            Template.ORDER_PLACED ->
+                                composer.orderPlaced(
+                                    "a@b.de",
+                                    language,
+                                    PlacedOrder(
+                                        "o-1",
+                                        "u-1",
+                                        language,
+                                        "Phantom Pizza",
+                                        listOf(OrderedLine("Pizza", 1, 1090)),
+                                        1289,
+                                        820,
+                                        Instant.EPOCH,
+                                    ),
+                                )
+                            Template.ORDER_DELIVERED -> composer.orderDelivered("a@b.de", language, "o-1", "Phantom Pizza")
                         }.subject
                     }
                 }
