@@ -1,6 +1,6 @@
 # nothingeats-notification-service
 
-Outbound channels of [NothingEats](https://github.com/slashncode/nothingeats). Phase 1: mails that follow from identity events. Later: web push and the server-sent event stream for live updates in the browser.
+Outbound channels of [NothingEats](https://github.com/slashncode/nothingeats): mails that follow from domain events, and a server-sent event stream for live updates in the browser. Web push comes later.
 
 ## Mails
 
@@ -11,6 +11,14 @@ Outbound channels of [NothingEats](https://github.com/slashncode/nothingeats). P
 | `nothingeats.identity.user.verified.v1` | Welcome |
 
 German and English, plain text plus HTML. SMTP to Mailpit locally (`http://mail.nothingeats.localhost`), Resend in production (planned).
+
+## Live updates (`GET /api/notification/v1/stream`)
+
+Server-sent events for the signed-in user (`Authorization: Bearer …`; the web app reads the stream with `fetch`, because `EventSource` cannot send headers).
+
+- `event: ready` once the stream listens, then one event per update (`event: order.updated`, `data: {…}`), and a `: ping` comment every 15 s so proxies keep the connection open.
+- Event handlers publish through the `LiveUpdates` port to the user's Valkey channel `live:<userId>`; every pod subscribes to `live:*` and forwards to the streams it holds. So the pod that consumed a Kafka event does not need to hold the user's connection.
+- Nothing is stored: an update nobody listens to is gone. A browser that reconnects loads the current state from the owning service.
 
 ## Guarantees
 

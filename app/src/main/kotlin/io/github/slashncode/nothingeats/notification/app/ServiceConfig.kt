@@ -7,18 +7,21 @@ import io.github.slashncode.nothingeats.platform.http.auth.JwtConfig
 import io.github.slashncode.nothingeats.platform.kafka.KafkaConfig
 import io.github.slashncode.nothingeats.platform.persistence.PostgresConfig
 import io.github.slashncode.nothingeats.platform.posthog.PostHogSettings
+import io.github.slashncode.nothingeats.platform.valkey.ValkeyConfig
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
  * Everything the service reads from its environment, validated at startup. Required:
  * `DATABASE__URL`, `DATABASE__USER`, `DATABASE__PASSWORD`. Mail: `SMTP__HOST`, `SMTP__PORT`, `SMTP__FROM`.
+ * Live updates: `VALKEY__HOST`, `VALKEY__PORT`, `VALKEY__PASSWORD`.
  */
 data class ServiceConfig(
     val http: HttpServerConfig = HttpServerConfig(),
     val database: PostgresConfig,
     val kafka: KafkaConfig = KafkaConfig(),
     val smtp: SmtpConfig = SmtpConfig(),
+    val valkey: ValkeyConfig = ValkeyConfig(),
     val links: Links = Links(),
     val jwt: JwtConfig = JwtConfig(),
     val posthog: PostHogSettings = PostHogSettings(),

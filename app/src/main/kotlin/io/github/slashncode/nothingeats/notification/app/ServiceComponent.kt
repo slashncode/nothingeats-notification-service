@@ -1,9 +1,13 @@
 package io.github.slashncode.nothingeats.notification.app
 
+import io.github.slashncode.nothingeats.notification.adapters.live.LiveStreamRoutes
+import io.github.slashncode.nothingeats.notification.adapters.live.SseExtension
+import io.github.slashncode.nothingeats.notification.adapters.live.ValkeyLiveUpdates
 import io.github.slashncode.nothingeats.notification.adapters.mail.SmtpMailSender
 import io.github.slashncode.nothingeats.notification.adapters.messaging.IdentityEventsHandler
 import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedDeliveries
 import io.github.slashncode.nothingeats.notification.application.Deliveries
+import io.github.slashncode.nothingeats.notification.application.LiveUpdates
 import io.github.slashncode.nothingeats.notification.application.MailComposer
 import io.github.slashncode.nothingeats.notification.application.MailSender
 import io.github.slashncode.nothingeats.notification.application.UserMails
@@ -32,6 +36,7 @@ import io.github.slashncode.nothingeats.platform.persistence.PostgresDatabase
 import io.github.slashncode.nothingeats.platform.posthog.PostHogAnalytics
 import io.github.slashncode.nothingeats.platform.posthog.PostHogExceptionReporter
 import io.github.slashncode.nothingeats.platform.posthog.PostHogHttpExtension
+import io.github.slashncode.nothingeats.platform.valkey.ValkeyPubSub
 import me.tatarka.inject.annotations.Component
 import me.tatarka.inject.annotations.IntoSet
 import me.tatarka.inject.annotations.Provides
@@ -71,10 +76,6 @@ abstract class ServiceComponent(
     @ServiceScope
     @Provides
     fun postgres(migrations: FlywayMigrations): PostgresDatabase = PostgresDatabase(config.database, migrations)
-
-    /** Health endpoints only for now; the SSE stream for the browser comes with live updates. */
-    @Provides
-    fun routes(): Set<HttpRoutes> = emptySet()
 
     @ServiceScope
     @Provides
@@ -129,6 +130,28 @@ abstract class ServiceComponent(
     @IntoSet
     @Provides
     fun postHogHttp(): HttpExtension = PostHogHttpExtension()
+
+    // Live updates (server-sent events, fanned out between pods through Valkey)
+
+    @ServiceScope
+    @Provides
+    fun valkeyPubSub(): ValkeyPubSub = ValkeyPubSub(config.valkey, setOf(ValkeyLiveUpdates.PATTERN))
+
+    /** Not a readiness check: without Valkey only live updates stop, mails keep going. */
+    @IntoSet
+    @Provides
+    fun valkeyPubSubLifecycle(pubSub: ValkeyPubSub): LifecycleComponent = pubSub
+
+    @Provides
+    fun liveUpdates(pubSub: ValkeyPubSub): LiveUpdates = ValkeyLiveUpdates(pubSub)
+
+    @IntoSet
+    @Provides
+    fun sse(): HttpExtension = SseExtension()
+
+    @IntoSet
+    @Provides
+    fun liveStream(pubSub: ValkeyPubSub): HttpRoutes = LiveStreamRoutes(pubSub)
 
     // Messaging
 

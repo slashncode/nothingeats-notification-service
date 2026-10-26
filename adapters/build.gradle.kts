@@ -12,6 +12,8 @@ dependencies {
     api(libs.nothingeats.platform.persistence)
     api(libs.nothingeats.ktor.posthog)
     api(libs.nothingeats.platform.kafka)
+    api(libs.nothingeats.platform.valkey)
+    implementation(libs.ktor.server.sse)
     implementation(libs.angus.mail)
     implementation(libs.exposed.java.time)
 
@@ -20,4 +22,6 @@ dependencies {
     testImplementation(testFixtures(project(":application")))
     testImplementation(libs.nothingeats.platform.testing)
     testImplementation(libs.ktor.server.test.host)
+    // The live stream is tested over a real socket: the test host only answers once a handler ends.
+    testImplementation(libs.ktor.server.netty)
 }

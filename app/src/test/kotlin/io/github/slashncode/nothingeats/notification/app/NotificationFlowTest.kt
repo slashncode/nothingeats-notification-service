@@ -8,6 +8,7 @@ import io.github.slashncode.nothingeats.platform.kafka.KafkaClients
 import io.github.slashncode.nothingeats.platform.kafka.KafkaConfig
 import io.github.slashncode.nothingeats.platform.testing.KafkaTestCluster
 import io.github.slashncode.nothingeats.platform.testing.PostgresTestDatabases
+import io.github.slashncode.nothingeats.platform.testing.ValkeyTestServer
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldHaveSize
@@ -58,6 +59,7 @@ class NotificationFlowTest :
                         database = PostgresTestDatabases.create(),
                         kafka = KafkaConfig(KafkaTestCluster.bootstrapServers),
                         smtp = MailpitTestServer.smtp,
+                        valkey = ValkeyTestServer.config(),
                         lifecycle = LifecycleConfig(drainDelay = Duration.ZERO),
                     ),
                 )
