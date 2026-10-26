@@ -17,6 +17,6 @@ Notification service of NothingEats (mails, live updates via SSE; web push later
 - Schema changes are new Flyway files in `adapters/src/main/resources/db/migration`; never edit an applied migration. Serving pods refuse to start with pending migrations.
 - Repositories map constraint violations by SQLSTATE and constraint name (helpers in `platform-persistence`).
 - The platform (`../nothingeats-kotlin-platform`) is used as a composite build when checked out; changes there are picked up without publishing.
-- Never log full email addresses or mail bodies; deliveries keep only the recipient domain.
+- Never log full email addresses or mail bodies; deliveries keep only the recipient domain. Full addresses live only in `recipients` (projected from identity events, erased on `user.deleted`).
 - Event handlers are tolerant readers of other services' contracts: decode only the fields you need.
 - Live updates go through the `LiveUpdates` port (Valkey pub/sub), never straight to a stream: the consuming pod is not the one holding the browser's connection. Stream tests use a real socket; Ktor's test host only answers when a handler ends.

@@ -1,5 +1,7 @@
 package io.github.slashncode.nothingeats.notification.adapters.messaging
 
+import io.github.slashncode.nothingeats.notification.application.Recipient
+import io.github.slashncode.nothingeats.notification.application.Recipients
 import io.github.slashncode.nothingeats.notification.application.UserMails
 import io.github.slashncode.nothingeats.notification.domain.Language
 import io.github.slashncode.nothingeats.platform.kafka.CloudEvent
@@ -21,8 +23,32 @@ internal data class IdentityUserEvent(
     val magicToken: String? = null,
 )
 
+/**
+ * The address book part of identity events: every event with an address keeps the recipient
+ * current, `user.deleted` erases it. Shared by the live consumer and `cron replay-identity`.
+ */
+class RecipientProjection(
+    private val recipients: Recipients,
+) {
+    suspend fun apply(event: CloudEvent) {
+        when (event.type) {
+            DELETED -> recipients.delete(event.decode(IdentityUserDeleted.serializer()).userId)
+            in HANDLED -> {
+                val user = event.decode(IdentityUserEvent.serializer())
+                recipients.upsert(Recipient(user.userId, user.email, Language.parse(user.locale)))
+            }
+        }
+    }
+}
+
+@Serializable
+internal data class IdentityUserDeleted(
+    val userId: String,
+)
+
 class IdentityEventsHandler(
     private val mails: UserMails,
+    private val recipients: RecipientProjection,
 ) : EventHandler {
     override val topic = "identity.user.v1"
 
@@ -30,9 +56,10 @@ class IdentityEventsHandler(
 
     override suspend fun handle(event: CloudEvent) {
         val type = event.type
+        recipients.apply(event)
         if (type == DELETED) {
-            // Nothing to erase: deliveries keep only the recipient's domain, never the address or the user id.
-            log.debug("Account deleted; this service holds no personal data about it")
+            // The recipient is gone; deliveries keep only the recipient's domain, never the address or the user id.
+            log.debug("Account deleted; its address is erased")
             return
         }
         if (type !in HANDLED) {
@@ -71,15 +98,13 @@ class IdentityEventsHandler(
                 )
         }
     }
-
-    private companion object {
-        const val REGISTERED = "nothingeats.identity.user.registered.v1"
-        const val REGISTRATION_ATTEMPTED = "nothingeats.identity.user.registration-attempted.v1"
-        const val VERIFIED = "nothingeats.identity.user.verified.v1"
-        const val PASSWORD_RESET_REQUESTED = "nothingeats.identity.user.password-reset-requested.v1"
-        const val PASSWORD_CHANGED = "nothingeats.identity.user.password-changed.v1"
-        const val MAGIC_LINK_REQUESTED = "nothingeats.identity.user.magic-link-requested.v1"
-        const val DELETED = "nothingeats.identity.user.deleted.v1"
-        val HANDLED = setOf(REGISTERED, REGISTRATION_ATTEMPTED, VERIFIED, PASSWORD_RESET_REQUESTED, PASSWORD_CHANGED, MAGIC_LINK_REQUESTED)
-    }
 }
+
+private const val REGISTERED = "nothingeats.identity.user.registered.v1"
+private const val REGISTRATION_ATTEMPTED = "nothingeats.identity.user.registration-attempted.v1"
+private const val VERIFIED = "nothingeats.identity.user.verified.v1"
+private const val PASSWORD_RESET_REQUESTED = "nothingeats.identity.user.password-reset-requested.v1"
+private const val PASSWORD_CHANGED = "nothingeats.identity.user.password-changed.v1"
+private const val MAGIC_LINK_REQUESTED = "nothingeats.identity.user.magic-link-requested.v1"
+private const val DELETED = "nothingeats.identity.user.deleted.v1"
+private val HANDLED = setOf(REGISTERED, REGISTRATION_ATTEMPTED, VERIFIED, PASSWORD_RESET_REQUESTED, PASSWORD_CHANGED, MAGIC_LINK_REQUESTED)

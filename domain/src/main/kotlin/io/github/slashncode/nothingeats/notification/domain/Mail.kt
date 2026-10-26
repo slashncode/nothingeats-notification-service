@@ -22,6 +22,8 @@ enum class Template(
     PASSWORD_RESET("password_reset"),
     PASSWORD_CHANGED("password_changed"),
     MAGIC_LINK("magic_link"),
+    ORDER_PLACED("order_placed"),
+    ORDER_DELIVERED("order_delivered"),
 }
 
 data class Mail(

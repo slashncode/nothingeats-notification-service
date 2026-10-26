@@ -4,6 +4,11 @@ import io.github.slashncode.nothingeats.notification.domain.Language
 import io.github.slashncode.nothingeats.notification.domain.Mail
 import io.github.slashncode.nothingeats.notification.domain.Template
 import java.net.URLEncoder
+import java.text.NumberFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Currency
+import java.util.Locale
 
 data class Links(
     /** Origin of the web app; mail links point there, never at an API. */
@@ -15,6 +20,8 @@ private data class Copy(
     val heading: String,
     val body: String,
     val action: String?,
+    /** Lines shown as a list under the body (an order's dishes). */
+    val details: List<String> = emptyList(),
 )
 
 /** Renders the DE/EN mails as plain text plus a small HTML version. */
@@ -60,18 +67,85 @@ class MailComposer(
         language: Language,
     ) = compose(to, Template.PASSWORD_CHANGED, language, "${links.webBaseUrl}/forgot-password")
 
+    fun orderPlaced(
+        to: String,
+        language: Language,
+        order: PlacedOrder,
+    ): Mail {
+        val de = language == Language.DE
+        val money = money(language)
+        val arrival = ARRIVAL.format(order.estimatedArrivalAt.atZone(BERLIN))
+        val lines = order.lines.map { "${it.quantity} × ${it.name} – ${money.format(it.totalCents / CENTS)}" }
+        val copy =
+            if (de) {
+                Copy(
+                    "Bestellt bei ${order.restaurantName}: kommt (nicht)",
+                    "Danke für deine Bestellung!",
+                    "${order.restaurantName} legt los. Ankunft gegen $arrival Uhr – also nie. " +
+                        "Gespart: ${money.format(order.totalCents / CENTS)}, nicht gegessen: ${order.calories} kcal.",
+                    "Lieferung verfolgen",
+                    lines,
+                )
+            } else {
+                Copy(
+                    "Ordered from ${order.restaurantName}: (not) on its way",
+                    "Thanks for your order!",
+                    "${order.restaurantName} is on it. Arriving around $arrival – that is, never. " +
+                        "Money not spent: ${money.format(order.totalCents / CENTS)}, calories not eaten: ${order.calories} kcal.",
+                    "Track your delivery",
+                    lines,
+                )
+            }
+        return render(to, language, copy, "${links.webBaseUrl}/orders/${URLEncoder.encode(order.orderId, Charsets.UTF_8)}")
+    }
+
+    fun orderDelivered(
+        to: String,
+        language: Language,
+        orderId: String,
+        restaurantName: String,
+    ): Mail {
+        val copy =
+            if (language == Language.DE) {
+                Copy(
+                    "Dein Nichts ist da",
+                    "Geliefert!",
+                    "Deine Bestellung von $restaurantName ist angekommen. Schau ruhig nach: Da ist nichts. Guten Appetit!",
+                    "Bestellung ansehen",
+                )
+            } else {
+                Copy(
+                    "Your nothing has arrived",
+                    "Delivered!",
+                    "Your order from $restaurantName has arrived. Go and look: there's nothing there. Enjoy!",
+                    "View order",
+                )
+            }
+        return render(to, language, copy, "${links.webBaseUrl}/orders/${URLEncoder.encode(orderId, Charsets.UTF_8)}")
+    }
+
     private fun compose(
         to: String,
         template: Template,
         language: Language,
         link: String,
+    ): Mail = render(to, language, copy(template, language), link)
+
+    private fun render(
+        to: String,
+        language: Language,
+        copy: Copy,
+        link: String,
     ): Mail {
-        val copy = copy(template, language)
         val text =
             buildString {
                 appendLine(copy.heading)
                 appendLine()
                 appendLine(copy.body)
+                if (copy.details.isNotEmpty()) {
+                    appendLine()
+                    copy.details.forEach { appendLine("- $it") }
+                }
                 if (copy.action != null) {
                     appendLine()
                     appendLine("${copy.action}: $link")
@@ -85,6 +159,15 @@ class MailComposer(
             <html lang="${language.tag}"><body style="font-family: system-ui, sans-serif; color: #1c1917; max-width: 520px; margin: 0 auto; padding: 24px;">
               <h1 style="font-size: 22px;">${copy.heading.escaped()}</h1>
               <p style="font-size: 16px; line-height: 1.5;">${copy.body.escaped()}</p>
+              ${if (copy.details.isEmpty()) {
+                ""
+            } else {
+                copy.details.joinToString(
+                    "",
+                    "<ul style=\"font-size: 15px; line-height: 1.6;\">",
+                    "</ul>",
+                ) { "<li>${it.escaped()}</li>" }
+            }}
               ${copy.action?.let {
                 """<p><a href="${link.escaped()}" style="display: inline-block; background: #ea580c; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none;">${it.escaped()}</a></p>"""
             } ?: ""}
@@ -181,6 +264,8 @@ class MailComposer(
                         "Log in now",
                     )
                 }
+            // Composed with their order details in orderPlaced/orderDelivered.
+            Template.ORDER_PLACED, Template.ORDER_DELIVERED -> error("${template.key} needs the order")
             Template.PASSWORD_CHANGED ->
                 if (de) {
                     Copy(
@@ -200,8 +285,23 @@ class MailComposer(
         }
     }
 
+    private fun money(language: Language): NumberFormat =
+        NumberFormat
+            .getCurrencyInstance(
+                if (language ==
+                    Language.DE
+                ) {
+                    Locale.GERMANY
+                } else {
+                    Locale.UK
+                },
+            ).apply { currency = Currency.getInstance("EUR") }
+
     private companion object {
         const val SIGNATURE = "NothingEats – Order everything. Eat nothing."
+        const val CENTS = 100.0
+        val BERLIN: ZoneId = ZoneId.of("Europe/Berlin")
+        val ARRIVAL: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }
 

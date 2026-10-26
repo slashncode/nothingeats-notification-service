@@ -1,15 +1,23 @@
 package io.github.slashncode.nothingeats.notification.app
 
+import io.github.slashncode.nothingeats.notification.adapters.cron.ReplayIdentityTask
 import io.github.slashncode.nothingeats.notification.adapters.live.LiveStreamRoutes
 import io.github.slashncode.nothingeats.notification.adapters.live.SseExtension
 import io.github.slashncode.nothingeats.notification.adapters.live.ValkeyLiveUpdates
 import io.github.slashncode.nothingeats.notification.adapters.mail.SmtpMailSender
+import io.github.slashncode.nothingeats.notification.adapters.messaging.CourierEventsHandler
+import io.github.slashncode.nothingeats.notification.adapters.messaging.DeliveryEventsHandler
 import io.github.slashncode.nothingeats.notification.adapters.messaging.IdentityEventsHandler
+import io.github.slashncode.nothingeats.notification.adapters.messaging.OrderEventsHandler
+import io.github.slashncode.nothingeats.notification.adapters.messaging.RecipientProjection
 import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedDeliveries
+import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedRecipients
 import io.github.slashncode.nothingeats.notification.application.Deliveries
 import io.github.slashncode.nothingeats.notification.application.LiveUpdates
 import io.github.slashncode.nothingeats.notification.application.MailComposer
 import io.github.slashncode.nothingeats.notification.application.MailSender
+import io.github.slashncode.nothingeats.notification.application.OrderMails
+import io.github.slashncode.nothingeats.notification.application.Recipients
 import io.github.slashncode.nothingeats.notification.application.UserMails
 import io.github.slashncode.nothingeats.platform.core.analytics.ProductAnalytics
 import io.github.slashncode.nothingeats.platform.core.lifecycle.HealthCheck
@@ -59,6 +67,7 @@ abstract class ServiceComponent(
     abstract val runner: ServiceRunner
     abstract val lifecycle: LifecycleManager
     abstract val migrations: FlywayMigrations
+    abstract val recipients: Recipients
 
     // Platform
 
@@ -199,7 +208,60 @@ abstract class ServiceComponent(
         analytics: ProductAnalytics,
     ): UserMails = UserMails(MailComposer(config.links), sender, deliveries, analytics)
 
+    @Provides
+    fun recipients(
+        postgres: PostgresDatabase,
+        clock: Clock,
+    ): Recipients = ExposedRecipients(postgres, clock)
+
+    @Provides
+    fun recipientProjection(recipients: Recipients): RecipientProjection = RecipientProjection(recipients)
+
+    @Provides
+    fun orderMails(
+        recipients: Recipients,
+        sender: MailSender,
+        deliveries: Deliveries,
+        analytics: ProductAnalytics,
+    ): OrderMails = OrderMails(recipients, MailComposer(config.links), sender, deliveries, analytics)
+
     @IntoSet
     @Provides
-    fun identityEvents(mails: UserMails): EventHandler = IdentityEventsHandler(mails)
+    fun identityEvents(
+        mails: UserMails,
+        projection: RecipientProjection,
+    ): EventHandler = IdentityEventsHandler(mails, projection)
+
+    @IntoSet
+    @Provides
+    fun orderEvents(
+        mails: OrderMails,
+        live: LiveUpdates,
+    ): EventHandler = OrderEventsHandler(mails, live)
+
+    @IntoSet
+    @Provides
+    fun deliveryEvents(
+        mails: OrderMails,
+        live: LiveUpdates,
+    ): EventHandler = DeliveryEventsHandler(mails, live)
+
+    @IntoSet
+    @Provides
+    fun replayIdentity(projection: RecipientProjection): CronTask = ReplayIdentityTask(config.kafka, projection)
+
+    /**
+     * Courier positions in a consumer group of their own, without an inbox: ephemeral, frequent,
+     * harmless when repeated. Not a readiness check either; mails must not wait for map dots.
+     */
+    @IntoSet
+    @Provides
+    fun courierConsumer(live: LiveUpdates): LifecycleComponent =
+        EventConsumer(
+            config = EventConsumerConfig(groupId = "notification-service-live"),
+            handlers = setOf(CourierEventsHandler(live)),
+            db = null,
+            consumerFactory = { KafkaClients.consumer(config.kafka, "notification-service-live") },
+            deadLetters = KafkaClients.producer(config.kafka, "notification-service-live-dlq"),
+        )
 }
