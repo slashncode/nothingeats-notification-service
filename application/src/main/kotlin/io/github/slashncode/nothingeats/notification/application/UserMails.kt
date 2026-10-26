@@ -33,21 +33,24 @@ class UserMails(
         email: String,
         language: Language,
         token: String,
-    ) = send(eventId, userId, Template.VERIFY_EMAIL, composer.verifyEmail(email, language, token))
+        analytics: Boolean,
+    ) = send(eventId, userId, Template.VERIFY_EMAIL, composer.verifyEmail(email, language, token), analytics)
 
     suspend fun registrationAttempted(
         eventId: String,
         userId: String,
         email: String,
         language: Language,
-    ) = send(eventId, userId, Template.REGISTRATION_ATTEMPTED, composer.registrationAttempted(email, language))
+        analytics: Boolean,
+    ) = send(eventId, userId, Template.REGISTRATION_ATTEMPTED, composer.registrationAttempted(email, language), analytics)
 
     suspend fun welcome(
         eventId: String,
         userId: String,
         email: String,
         language: Language,
-    ) = send(eventId, userId, Template.WELCOME, composer.welcome(email, language))
+        analytics: Boolean,
+    ) = send(eventId, userId, Template.WELCOME, composer.welcome(email, language), analytics)
 
     suspend fun passwordReset(
         eventId: String,
@@ -55,7 +58,8 @@ class UserMails(
         email: String,
         language: Language,
         token: String,
-    ) = send(eventId, userId, Template.PASSWORD_RESET, composer.passwordReset(email, language, token))
+        analytics: Boolean,
+    ) = send(eventId, userId, Template.PASSWORD_RESET, composer.passwordReset(email, language, token), analytics)
 
     suspend fun magicLink(
         eventId: String,
@@ -63,23 +67,27 @@ class UserMails(
         email: String,
         language: Language,
         token: String,
-    ) = send(eventId, userId, Template.MAGIC_LINK, composer.magicLink(email, language, token))
+        analytics: Boolean,
+    ) = send(eventId, userId, Template.MAGIC_LINK, composer.magicLink(email, language, token), analytics)
 
     suspend fun passwordChanged(
         eventId: String,
         userId: String,
         email: String,
         language: Language,
-    ) = send(eventId, userId, Template.PASSWORD_CHANGED, composer.passwordChanged(email, language))
+        analytics: Boolean,
+    ) = send(eventId, userId, Template.PASSWORD_CHANGED, composer.passwordChanged(email, language), analytics)
 
     private suspend fun send(
         eventId: String,
         userId: String,
         template: Template,
         mail: Mail,
+        consented: Boolean,
     ) {
         sender.send(mail)
         deliveries.record(eventId, template, mail.recipientDomain)
-        analytics.capture("email_sent", mapOf("template" to template.key), distinctId = userId)
+        // Only for people who agreed to analytics (the event says whether they had).
+        if (consented) analytics.capture("email_sent", mapOf("template" to template.key), distinctId = userId)
     }
 }

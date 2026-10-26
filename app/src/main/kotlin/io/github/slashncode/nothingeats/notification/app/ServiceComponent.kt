@@ -10,6 +10,7 @@ import io.github.slashncode.nothingeats.notification.adapters.messaging.Delivery
 import io.github.slashncode.nothingeats.notification.adapters.messaging.IdentityEventsHandler
 import io.github.slashncode.nothingeats.notification.adapters.messaging.OrderEventsHandler
 import io.github.slashncode.nothingeats.notification.adapters.messaging.RecipientProjection
+import io.github.slashncode.nothingeats.notification.adapters.messaging.RewardEventsHandler
 import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedDeliveries
 import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedRecipients
 import io.github.slashncode.nothingeats.notification.application.Deliveries
@@ -245,6 +246,10 @@ abstract class ServiceComponent(
         mails: OrderMails,
         live: LiveUpdates,
     ): EventHandler = DeliveryEventsHandler(mails, live)
+
+    @IntoSet
+    @Provides
+    fun rewardEvents(live: LiveUpdates): EventHandler = RewardEventsHandler(live)
 
     @IntoSet
     @Provides

@@ -46,6 +46,7 @@ internal data class OrderPlacedV1(
     val totalCents: Long,
     val calories: Int,
     val estimatedArrivalAt: String,
+    val analytics: Boolean = false,
 )
 
 /** `ordering.order.v1`: the confirmation mail, and the first live update for open tabs. */
@@ -83,6 +84,7 @@ class OrderEventsHandler(
                 totalCents = order.totalCents,
                 calories = order.calories,
                 estimatedArrivalAt = Instant.parse(order.estimatedArrivalAt),
+                analytics = order.analytics,
             ),
         )
         live.publish(
@@ -119,6 +121,7 @@ internal data class StatusChangedV1(
     val estimatedArrivalAt: String,
     val restaurantName: String,
     val courier: CourierV1,
+    val analytics: Boolean = false,
 )
 
 /** `delivery.delivery.v1`: every step to the customer's open tabs, and a mail when nothing has arrived. */
@@ -147,7 +150,7 @@ class DeliveryEventsHandler(
                 }.toString(),
             ),
         )
-        if (change.status == DELIVERED) mails.delivered(event.id, change.userId, change.orderId, change.restaurantName)
+        if (change.status == DELIVERED) mails.delivered(event.id, change.userId, change.orderId, change.restaurantName, change.analytics)
     }
 
     private companion object {
@@ -198,6 +201,31 @@ class CourierEventsHandler(
 
     private companion object {
         const val COURIER_MOVED = "nothingeats.delivery.courier.moved.v1"
+    }
+}
+
+@Serializable
+internal data class RewardEarnedV1(
+    val userId: String,
+)
+
+/**
+ * `loyalty.reward.v1` (loyalty-service docs/events.md) into the stream as `reward.earned`, passed
+ * through as is: XP, level, badges, stamp card, coupons. The browser shows the confetti.
+ */
+class RewardEventsHandler(
+    private val live: LiveUpdates,
+) : EventHandler {
+    override val topic = "loyalty.reward.v1"
+
+    override suspend fun handle(event: CloudEvent) {
+        if (event.type != EARNED) return
+        val reward = event.decode(RewardEarnedV1.serializer())
+        live.publish(LiveUpdate(reward.userId, "reward.earned", event.data.toString()))
+    }
+
+    private companion object {
+        const val EARNED = "nothingeats.loyalty.reward.earned.v1"
     }
 }
 

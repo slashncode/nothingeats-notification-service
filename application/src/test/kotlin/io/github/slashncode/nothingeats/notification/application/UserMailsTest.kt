@@ -30,16 +30,18 @@ class UserMailsTest :
             mail.html shouldContain "&lt;script&gt;"
         }
 
-        test("each mail is sent, logged by domain only, and counted for analytics") {
+        test("each mail is sent, logged by domain only, and counted for analytics only with consent") {
             val sender = RecordingMailSender()
             val deliveries = RecordingDeliveries()
             val analytics = RecordingAnalytics()
             val mails = UserMails(composer, sender, deliveries, analytics)
 
-            mails.verifyEmail("event-1", "user-1", "ghost@nothingeats.dev", Language.EN, "token")
-            mails.registrationAttempted("event-2", "user-1", "ghost@nothingeats.dev", Language.DE)
+            mails.verifyEmail("event-1", "user-1", "ghost@nothingeats.dev", Language.EN, "token", analytics = true)
+            mails.registrationAttempted("event-2", "user-1", "ghost@nothingeats.dev", Language.DE, analytics = true)
+            mails.welcome("event-3", "user-2", "other@nothingeats.dev", Language.DE, analytics = false)
 
-            sender.sent.map { it.subject } shouldBe
+            sender.sent.size shouldBe 3
+            sender.sent.take(2).map { it.subject } shouldBe
                 listOf("Confirm your email address", "Jemand wollte sich mit deiner Adresse registrieren")
             deliveries.recorded.first() shouldBe Triple("event-1", Template.VERIFY_EMAIL, "nothingeats.dev")
             analytics.events.map { it.name to it.properties["template"] } shouldBe

@@ -21,6 +21,8 @@ internal data class IdentityUserEvent(
     val verificationToken: String? = null,
     val resetToken: String? = null,
     val magicToken: String? = null,
+    /** The person's analytics consent when the event happened; older events lack it (no consent). */
+    val analytics: Boolean = false,
 )
 
 /**
@@ -76,9 +78,10 @@ class IdentityEventsHandler(
                     user.email,
                     language,
                     requireNotNull(user.verificationToken) { "registered event without token" },
+                    user.analytics,
                 )
-            REGISTRATION_ATTEMPTED -> mails.registrationAttempted(event.id, user.userId, user.email, language)
-            VERIFIED -> mails.welcome(event.id, user.userId, user.email, language)
+            REGISTRATION_ATTEMPTED -> mails.registrationAttempted(event.id, user.userId, user.email, language, user.analytics)
+            VERIFIED -> mails.welcome(event.id, user.userId, user.email, language, user.analytics)
             PASSWORD_RESET_REQUESTED ->
                 mails.passwordReset(
                     event.id,
@@ -86,8 +89,9 @@ class IdentityEventsHandler(
                     user.email,
                     language,
                     requireNotNull(user.resetToken) { "password reset event without token" },
+                    user.analytics,
                 )
-            PASSWORD_CHANGED -> mails.passwordChanged(event.id, user.userId, user.email, language)
+            PASSWORD_CHANGED -> mails.passwordChanged(event.id, user.userId, user.email, language, user.analytics)
             MAGIC_LINK_REQUESTED ->
                 mails.magicLink(
                     event.id,
@@ -95,6 +99,7 @@ class IdentityEventsHandler(
                     user.email,
                     language,
                     requireNotNull(user.magicToken) { "magic link event without token" },
+                    user.analytics,
                 )
         }
     }

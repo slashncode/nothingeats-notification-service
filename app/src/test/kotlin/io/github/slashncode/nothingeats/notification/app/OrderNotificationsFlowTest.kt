@@ -67,6 +67,7 @@ class OrderNotificationsFlowTest :
                 "ordering.order.v1",
                 "delivery.delivery.v1",
                 "delivery.courier.v1",
+                "loyalty.reward.v1",
                 "notification-service.dlq",
                 "notification-service-live.dlq",
             )
@@ -170,6 +171,22 @@ class OrderNotificationsFlowTest :
                             },
                         ),
                     )
+                    producer.publish(
+                        "loyalty.reward.v1",
+                        event(
+                            "nothingeats.loyalty.reward.earned.v1",
+                            userId,
+                            buildJsonObject {
+                                put("userId", userId)
+                                put("cause", "ORDER_DELIVERED")
+                                put("orderId", orderId)
+                                putJsonObject("xp") {
+                                    put("gained", 63)
+                                    put("level", 1)
+                                }
+                            },
+                        ),
+                    )
                 }
 
                 // The verification mail, the confirmation and the arrival.
@@ -189,6 +206,7 @@ class OrderNotificationsFlowTest :
                     val mine = received.filter { it.channel == "live:$userId" }.map { it.message }
                     mine.count { it.contains("\"type\":\"order.updated\"") } shouldBe 2
                     mine.count { it.contains("\"type\":\"courier.moved\"") } shouldBe 1
+                    mine.single { it.contains("\"type\":\"reward.earned\"") } shouldContain "\"gained\":63"
                 }
 
                 // An account older than the address book: the replay brings it back from the topic.

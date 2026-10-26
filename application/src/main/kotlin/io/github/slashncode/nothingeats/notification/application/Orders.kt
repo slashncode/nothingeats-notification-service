@@ -37,6 +37,8 @@ data class PlacedOrder(
     val totalCents: Long,
     val calories: Int,
     val estimatedArrivalAt: Instant,
+    /** The customer's analytics consent at checkout (from the order event). */
+    val analytics: Boolean = false,
 )
 
 /**
@@ -57,7 +59,7 @@ class OrderMails(
         order: PlacedOrder,
     ) {
         val recipient = recipients.find(order.userId) ?: return skipped(order.orderId)
-        send(eventId, recipient, Template.ORDER_PLACED, composer.orderPlaced(recipient.email, order.language, order))
+        send(eventId, recipient, Template.ORDER_PLACED, composer.orderPlaced(recipient.email, order.language, order), order.analytics)
     }
 
     suspend fun delivered(
@@ -65,6 +67,7 @@ class OrderMails(
         userId: String,
         orderId: String,
         restaurantName: String,
+        analytics: Boolean,
     ) {
         val recipient = recipients.find(userId) ?: return skipped(orderId)
         send(
@@ -72,6 +75,7 @@ class OrderMails(
             recipient,
             Template.ORDER_DELIVERED,
             composer.orderDelivered(recipient.email, recipient.language, orderId, restaurantName),
+            analytics,
         )
     }
 
@@ -80,10 +84,11 @@ class OrderMails(
         recipient: Recipient,
         template: Template,
         mail: io.github.slashncode.nothingeats.notification.domain.Mail,
+        consented: Boolean,
     ) {
         sender.send(mail)
         deliveries.record(eventId, template, mail.recipientDomain)
-        analytics.capture("email_sent", mapOf("template" to template.key), distinctId = recipient.userId)
+        if (consented) analytics.capture("email_sent", mapOf("template" to template.key), distinctId = recipient.userId)
     }
 
     private fun skipped(orderId: String) = log.info("No address known for the customer of order {}; no mail", orderId)
