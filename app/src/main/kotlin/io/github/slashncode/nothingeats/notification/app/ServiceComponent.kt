@@ -12,12 +12,20 @@ import io.github.slashncode.nothingeats.notification.adapters.messaging.OrderEve
 import io.github.slashncode.nothingeats.notification.adapters.messaging.RecipientProjection
 import io.github.slashncode.nothingeats.notification.adapters.messaging.RewardEventsHandler
 import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedDeliveries
+import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedPushSubscriptions
 import io.github.slashncode.nothingeats.notification.adapters.persistence.ExposedRecipients
+import io.github.slashncode.nothingeats.notification.adapters.push.NoPushSender
+import io.github.slashncode.nothingeats.notification.adapters.push.PushRoutes
+import io.github.slashncode.nothingeats.notification.adapters.push.WebPushSender
 import io.github.slashncode.nothingeats.notification.application.Deliveries
 import io.github.slashncode.nothingeats.notification.application.LiveUpdates
 import io.github.slashncode.nothingeats.notification.application.MailComposer
 import io.github.slashncode.nothingeats.notification.application.MailSender
 import io.github.slashncode.nothingeats.notification.application.OrderMails
+import io.github.slashncode.nothingeats.notification.application.PushEndpoints
+import io.github.slashncode.nothingeats.notification.application.PushSender
+import io.github.slashncode.nothingeats.notification.application.PushSubscriptions
+import io.github.slashncode.nothingeats.notification.application.Pushes
 import io.github.slashncode.nothingeats.notification.application.Recipients
 import io.github.slashncode.nothingeats.notification.application.UserMails
 import io.github.slashncode.nothingeats.platform.core.analytics.ProductAnalytics
@@ -69,6 +77,7 @@ abstract class ServiceComponent(
     abstract val lifecycle: LifecycleManager
     abstract val migrations: FlywayMigrations
     abstract val recipients: Recipients
+    abstract val pushSubscriptions: PushSubscriptions
 
     // Platform
 
@@ -191,6 +200,26 @@ abstract class ServiceComponent(
     @Provides
     fun purgeMessaging(postgres: PostgresDatabase): CronTask = PurgeMessagingTask(postgres)
 
+    // Web push
+
+    @Provides
+    fun pushSubscriptions(postgres: PostgresDatabase): PushSubscriptions = ExposedPushSubscriptions(postgres)
+
+    @ServiceScope
+    @Provides
+    fun pushSender(): PushSender = if (config.push.enabled) WebPushSender(config.push) else NoPushSender()
+
+    @Provides
+    fun pushes(
+        subscriptions: PushSubscriptions,
+        sender: PushSender,
+        clock: Clock,
+    ): Pushes = Pushes(subscriptions, sender, PushEndpoints(config.push.allowedOrigins), clock)
+
+    @IntoSet
+    @Provides
+    fun pushRoutes(pushes: Pushes): HttpRoutes = PushRoutes(pushes, config.push.publicKey.takeIf { config.push.enabled })
+
     // Mail
 
     @Provides
@@ -216,7 +245,10 @@ abstract class ServiceComponent(
     ): Recipients = ExposedRecipients(postgres, clock)
 
     @Provides
-    fun recipientProjection(recipients: Recipients): RecipientProjection = RecipientProjection(recipients)
+    fun recipientProjection(
+        recipients: Recipients,
+        pushSubscriptions: PushSubscriptions,
+    ): RecipientProjection = RecipientProjection(recipients, pushSubscriptions)
 
     @Provides
     fun orderMails(
@@ -245,11 +277,15 @@ abstract class ServiceComponent(
     fun deliveryEvents(
         mails: OrderMails,
         live: LiveUpdates,
-    ): EventHandler = DeliveryEventsHandler(mails, live)
+        pushes: Pushes,
+    ): EventHandler = DeliveryEventsHandler(mails, live, pushes)
 
     @IntoSet
     @Provides
-    fun rewardEvents(live: LiveUpdates): EventHandler = RewardEventsHandler(live)
+    fun rewardEvents(
+        live: LiveUpdates,
+        pushes: Pushes,
+    ): EventHandler = RewardEventsHandler(live, pushes)
 
     @IntoSet
     @Provides

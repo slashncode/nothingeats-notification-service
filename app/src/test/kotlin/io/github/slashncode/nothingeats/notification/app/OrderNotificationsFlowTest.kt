@@ -1,6 +1,11 @@
 package io.github.slashncode.nothingeats.notification.app
 
 import io.github.slashncode.nothingeats.notification.adapters.MailpitTestServer
+import io.github.slashncode.nothingeats.notification.adapters.push.FakePushService
+import io.github.slashncode.nothingeats.notification.adapters.push.TestBrowser
+import io.github.slashncode.nothingeats.notification.adapters.push.testPushConfig
+import io.github.slashncode.nothingeats.notification.application.PushSubscription
+import io.github.slashncode.nothingeats.notification.domain.Language
 import io.github.slashncode.nothingeats.platform.core.run.RunMode
 import io.github.slashncode.nothingeats.platform.http.HttpServerConfig
 import io.github.slashncode.nothingeats.platform.kafka.CloudEvent
@@ -31,6 +36,7 @@ import kotlinx.serialization.json.putJsonObject
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.clients.producer.ProducerRecord
 import java.net.ServerSocket
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration
@@ -58,10 +64,10 @@ private fun Producer<String, ByteArray>.publish(
     send(ProducerRecord(topic, event.subject, EventJson.encodeToString(CloudEvent.serializer(), event).toByteArray())).get()
 }
 
-/** Orders and deliveries in; mails in Mailpit and live updates on Valkey out — through the real composition root. */
+/** Orders and deliveries in; mails in Mailpit, live updates on Valkey and pushes out — through the real composition root. */
 class OrderNotificationsFlowTest :
     FunSpec({
-        test("an order is confirmed and its arrival announced, by mail and live; the address book follows identity") {
+        test("an order is confirmed and its arrival announced, by mail, live and push; the address book follows identity") {
             KafkaTestCluster.createTopics(
                 "identity.user.v1",
                 "ordering.order.v1",
@@ -71,6 +77,8 @@ class OrderNotificationsFlowTest :
                 "notification-service.dlq",
                 "notification-service-live.dlq",
             )
+            val pushService = FakePushService()
+            val browser = TestBrowser()
             val config =
                 ServiceConfig(
                     http = HttpServerConfig(port = freePort()),
@@ -78,6 +86,7 @@ class OrderNotificationsFlowTest :
                     kafka = KafkaConfig(KafkaTestCluster.bootstrapServers),
                     smtp = MailpitTestServer.smtp,
                     valkey = ValkeyTestServer.config(),
+                    push = testPushConfig(pushService.origin),
                     lifecycle = LifecycleConfig(drainDelay = Duration.ZERO),
                 )
             val service = ServiceComponent::class.create(config)
@@ -109,6 +118,17 @@ class OrderNotificationsFlowTest :
                     )
                 }
                 eventually(20.seconds) { service.recipients.find(userId)?.email shouldBe email }
+                service.pushSubscriptions.save(
+                    PushSubscription(
+                        pushService.endpoint("/push/phone"),
+                        browser.p256dh,
+                        browser.auth,
+                        userId,
+                        Language.DE,
+                        Instant.now(),
+                    ),
+                    keep = 10,
+                )
 
                 KafkaClients.producer(config.kafka, "test").use { producer ->
                     producer.publish(
@@ -183,6 +203,16 @@ class OrderNotificationsFlowTest :
                                 putJsonObject("xp") {
                                     put("gained", 63)
                                     put("level", 1)
+                                    put("previousLevel", 1)
+                                }
+                                putJsonArray("badges") {
+                                    addJsonObject {
+                                        put("key", "first-nothing")
+                                        putJsonObject("name") {
+                                            put("de", "Erstes Nichts")
+                                            put("en", "First nothing")
+                                        }
+                                    }
                                 }
                             },
                         ),
@@ -209,6 +239,15 @@ class OrderNotificationsFlowTest :
                     mine.single { it.contains("\"type\":\"reward.earned\"") } shouldContain "\"gained\":63"
                 }
 
+                // The phone, with the shop closed: nothing arrived, and a badge (decrypted as the browser would).
+                eventually(10.seconds) {
+                    pushService.received.map { browser.decrypt(it.body) }.let { pushes ->
+                        pushes shouldHaveSize 2
+                        pushes.single { it.contains("Nichts ist angekommen") } shouldContain "\"url\":\"/orders/$orderId\""
+                        pushes.single { it.contains("Neues Abzeichen") } shouldContain "Erstes Nichts"
+                    }
+                }
+
                 // An account older than the address book: the replay brings it back from the topic.
                 service.recipients.delete(userId)
                 ServiceComponent::class.create(config).runner.run(RunMode.Cron("replay-identity"))
@@ -221,7 +260,9 @@ class OrderNotificationsFlowTest :
                     )
                 }
                 eventually(20.seconds) { service.recipients.find(userId) shouldBe null }
+                service.pushSubscriptions.forUser(userId) shouldHaveSize 0
             } finally {
+                pushService.close()
                 scope.cancel()
                 listener.stop()
                 service.lifecycle.stop()

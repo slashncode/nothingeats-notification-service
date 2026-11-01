@@ -15,10 +15,12 @@ dependencies {
     api(libs.nothingeats.platform.valkey)
     implementation(libs.ktor.server.sse)
     implementation(libs.angus.mail)
+    implementation(libs.webpush)
     implementation(libs.exposed.java.time)
 
     testFixturesImplementation(libs.nothingeats.platform.testing)
     testFixturesImplementation(libs.kotlinx.serialization.json)
+    testFixturesImplementation(libs.webpush)
     testImplementation(testFixtures(project(":application")))
     testImplementation(libs.nothingeats.platform.testing)
     testImplementation(libs.ktor.server.test.host)

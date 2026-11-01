@@ -1,6 +1,7 @@
 package io.github.slashncode.nothingeats.notification.app
 
 import io.github.slashncode.nothingeats.notification.adapters.mail.SmtpConfig
+import io.github.slashncode.nothingeats.notification.adapters.push.PushConfig
 import io.github.slashncode.nothingeats.notification.application.Links
 import io.github.slashncode.nothingeats.platform.http.HttpServerConfig
 import io.github.slashncode.nothingeats.platform.http.auth.JwtConfig
@@ -14,7 +15,8 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Everything the service reads from its environment, validated at startup. Required:
  * `DATABASE__URL`, `DATABASE__USER`, `DATABASE__PASSWORD`. Mail: `SMTP__HOST`, `SMTP__PORT`, `SMTP__FROM`.
- * Live updates: `VALKEY__HOST`, `VALKEY__PORT`, `VALKEY__PASSWORD`.
+ * Live updates: `VALKEY__HOST`, `VALKEY__PORT`, `VALKEY__PASSWORD`. Web push: `PUSH__PUBLIC_KEY`,
+ * `PUSH__PRIVATE_KEY` (off without them).
  */
 data class ServiceConfig(
     val http: HttpServerConfig = HttpServerConfig(),
@@ -22,6 +24,7 @@ data class ServiceConfig(
     val kafka: KafkaConfig = KafkaConfig(),
     val smtp: SmtpConfig = SmtpConfig(),
     val valkey: ValkeyConfig = ValkeyConfig(),
+    val push: PushConfig = PushConfig(),
     val links: Links = Links(),
     val jwt: JwtConfig = JwtConfig(),
     val posthog: PostHogSettings = PostHogSettings(),

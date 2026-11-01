@@ -1,5 +1,6 @@
 package io.github.slashncode.nothingeats.notification.adapters.messaging
 
+import io.github.slashncode.nothingeats.notification.application.PushSubscriptions
 import io.github.slashncode.nothingeats.notification.application.Recipient
 import io.github.slashncode.nothingeats.notification.application.Recipients
 import io.github.slashncode.nothingeats.notification.application.UserMails
@@ -27,14 +28,20 @@ internal data class IdentityUserEvent(
 
 /**
  * The address book part of identity events: every event with an address keeps the recipient
- * current, `user.deleted` erases it. Shared by the live consumer and `cron replay-identity`.
+ * current, `user.deleted` erases it and the account's push subscriptions. Shared by the live
+ * consumer and `cron replay-identity`.
  */
 class RecipientProjection(
     private val recipients: Recipients,
+    private val pushSubscriptions: PushSubscriptions,
 ) {
     suspend fun apply(event: CloudEvent) {
         when (event.type) {
-            DELETED -> recipients.delete(event.decode(IdentityUserDeleted.serializer()).userId)
+            DELETED -> {
+                val userId = event.decode(IdentityUserDeleted.serializer()).userId
+                recipients.delete(userId)
+                pushSubscriptions.deleteAll(userId)
+            }
             in HANDLED -> {
                 val user = event.decode(IdentityUserEvent.serializer())
                 recipients.upsert(Recipient(user.userId, user.email, Language.parse(user.locale)))

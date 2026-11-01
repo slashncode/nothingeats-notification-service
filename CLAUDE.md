@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Notification service of NothingEats (mails, live updates via SSE; web push later). Created from the Kotlin service template. The cross-repo plan and session rules live in `../CLAUDE.md` (workspace root), if present — read it first.
+Notification service of NothingEats (mails, live updates via SSE, web push). Created from the Kotlin service template. The cross-repo plan and session rules live in `../CLAUDE.md` (workspace root), if present — read it first.
 
 ## Commands
 
@@ -19,4 +19,5 @@ Notification service of NothingEats (mails, live updates via SSE; web push later
 - The platform (`../nothingeats-kotlin-platform`) is used as a composite build when checked out; changes there are picked up without publishing.
 - Never log full email addresses or mail bodies; deliveries keep only the recipient domain. Full addresses live only in `recipients` (projected from identity events, erased on `user.deleted`).
 - Event handlers are tolerant readers of other services' contracts: decode only the fields you need.
+- Web push sends only to known push services (`PushEndpoints`); never relax that to any https URL, and never log an endpoint (only its host). A push failure must not fail the event handler.
 - Live updates go through the `LiveUpdates` port (Valkey pub/sub), never straight to a stream: the consuming pod is not the one holding the browser's connection. Stream tests use a real socket; Ktor's test host only answers when a handler ends.

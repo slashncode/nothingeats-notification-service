@@ -25,3 +25,49 @@ class RecordingDeliveries : Deliveries {
         recorded += Triple(eventId, template, recipientDomain)
     }
 }
+
+class InMemoryPushSubscriptions : PushSubscriptions {
+    val rows = CopyOnWriteArrayList<PushSubscription>()
+
+    override suspend fun save(
+        subscription: PushSubscription,
+        keep: Int,
+    ) {
+        rows.removeIf { it.endpoint == subscription.endpoint }
+        rows += subscription
+        val newest = rows.filter { it.userId == subscription.userId }.sortedByDescending { it.createdAt }.take(keep)
+        rows.removeIf { it.userId == subscription.userId && it !in newest }
+    }
+
+    override suspend fun forUser(userId: String) = rows.filter { it.userId == userId }
+
+    override suspend fun delete(
+        userId: String,
+        endpoint: String,
+    ) {
+        rows.removeIf { it.userId == userId && it.endpoint == endpoint }
+    }
+
+    override suspend fun expire(endpoint: String) {
+        rows.removeIf { it.endpoint == endpoint }
+    }
+
+    override suspend fun deleteAll(userId: String) {
+        rows.removeIf { it.userId == userId }
+    }
+}
+
+class RecordingPushSender : PushSender {
+    val sent = CopyOnWriteArrayList<Pair<PushSubscription, PushMessage>>()
+    var outcome = PushOutcome.SENT
+    var failWith: Exception? = null
+
+    override suspend fun send(
+        subscription: PushSubscription,
+        message: PushMessage,
+    ): PushOutcome {
+        failWith?.let { throw it }
+        sent += subscription to message
+        return outcome
+    }
+}

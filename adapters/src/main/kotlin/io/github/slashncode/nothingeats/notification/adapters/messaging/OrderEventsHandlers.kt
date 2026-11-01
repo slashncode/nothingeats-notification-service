@@ -1,10 +1,13 @@
 package io.github.slashncode.nothingeats.notification.adapters.messaging
 
+import io.github.slashncode.nothingeats.notification.application.BadgeName
+import io.github.slashncode.nothingeats.notification.application.EarnedReward
 import io.github.slashncode.nothingeats.notification.application.LiveUpdate
 import io.github.slashncode.nothingeats.notification.application.LiveUpdates
 import io.github.slashncode.nothingeats.notification.application.OrderMails
 import io.github.slashncode.nothingeats.notification.application.OrderedLine
 import io.github.slashncode.nothingeats.notification.application.PlacedOrder
+import io.github.slashncode.nothingeats.notification.application.Pushes
 import io.github.slashncode.nothingeats.notification.domain.Language
 import io.github.slashncode.nothingeats.platform.kafka.CloudEvent
 import io.github.slashncode.nothingeats.platform.kafka.EventHandler
@@ -124,10 +127,14 @@ internal data class StatusChangedV1(
     val analytics: Boolean = false,
 )
 
-/** `delivery.delivery.v1`: every step to the customer's open tabs, and a mail when nothing has arrived. */
+/**
+ * `delivery.delivery.v1`: every step to the customer's open tabs, a mail when nothing has arrived,
+ * and a push when the courier leaves and when it arrives.
+ */
 class DeliveryEventsHandler(
     private val mails: OrderMails,
     private val live: LiveUpdates,
+    private val pushes: Pushes,
 ) : EventHandler {
     override val topic = "delivery.delivery.v1"
 
@@ -151,6 +158,7 @@ class DeliveryEventsHandler(
             ),
         )
         if (change.status == DELIVERED) mails.delivered(event.id, change.userId, change.orderId, change.restaurantName, change.analytics)
+        pushes.deliveryChanged(change.userId, change.orderId, change.status, change.courier.name, change.restaurantName)
     }
 
     private companion object {
@@ -205,16 +213,34 @@ class CourierEventsHandler(
 }
 
 @Serializable
+internal data class RewardXpV1(
+    val level: Int = 0,
+    val previousLevel: Int = 0,
+)
+
+@Serializable
+internal data class RewardBadgeV1(
+    val name: NameV1,
+)
+
+@Serializable
 internal data class RewardEarnedV1(
     val userId: String,
+    val cause: String? = null,
+    val orderId: String? = null,
+    val xp: RewardXpV1 = RewardXpV1(),
+    val spinsGranted: Int = 0,
+    val badges: List<RewardBadgeV1> = emptyList(),
 )
 
 /**
  * `loyalty.reward.v1` (loyalty-service docs/events.md) into the stream as `reward.earned`, passed
- * through as is: XP, level, badges, stamp card, coupons. The browser shows the confetti.
+ * through as is: XP, level, badges, stamp card, coupons. The browser shows the confetti. Rewards for
+ * a delivery also become a push (a level or a badge); the wheel's are seen while spinning.
  */
 class RewardEventsHandler(
     private val live: LiveUpdates,
+    private val pushes: Pushes,
 ) : EventHandler {
     override val topic = "loyalty.reward.v1"
 
@@ -222,10 +248,23 @@ class RewardEventsHandler(
         if (event.type != EARNED) return
         val reward = event.decode(RewardEarnedV1.serializer())
         live.publish(LiveUpdate(reward.userId, "reward.earned", event.data.toString()))
+        if (reward.cause == ORDER_DELIVERED) {
+            pushes.rewardEarned(
+                reward.userId,
+                EarnedReward(
+                    orderId = reward.orderId,
+                    level = reward.xp.level,
+                    previousLevel = reward.xp.previousLevel,
+                    spinsGranted = reward.spinsGranted,
+                    badges = reward.badges.map { BadgeName(it.name.de, it.name.en) },
+                ),
+            )
+        }
     }
 
     private companion object {
         const val EARNED = "nothingeats.loyalty.reward.earned.v1"
+        const val ORDER_DELIVERED = "ORDER_DELIVERED"
     }
 }
 

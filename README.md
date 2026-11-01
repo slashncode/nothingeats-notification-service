@@ -1,6 +1,6 @@
 # nothingeats-notification-service
 
-Outbound channels of [NothingEats](https://github.com/slashncode/nothingeats): mails that follow from domain events, and a server-sent event stream for live updates in the browser. Web push comes later.
+Outbound channels of [NothingEats](https://github.com/slashncode/nothingeats): mails that follow from domain events, a server-sent event stream for live updates in the browser, and web push for when the shop is closed.
 
 ## Mails
 
@@ -28,6 +28,14 @@ Server-sent events for the signed-in user (`Authorization: Bearer …`; the web 
 - Event handlers publish through the `LiveUpdates` port to the user's Valkey channel `live:<userId>`; every pod subscribes to `live:*` and forwards to the streams it holds. So the pod that consumed a Kafka event does not need to hold the user's connection.
 - Nothing is stored: an update nobody listens to is gone. A browser that reconnects loads the current state from the owning service.
 
+## Web push (`/api/notification/v1/push`)
+
+- `GET /key` (public): the VAPID public key for `pushManager.subscribe`; `404 PUSH_DISABLED` while `PUSH__PUBLIC_KEY`/`PUSH__PRIVATE_KEY` are not set (the shop then hides the switch).
+- `PUT /subscriptions` with the browser's `PushSubscription.toJSON()` plus `language` (the language on screen); `GET /subscriptions` lists the user's devices by push service (also for the GDPR download); `DELETE /subscriptions?endpoint=` on switching off and on logout. A browser belongs to whoever subscribed last on it; a user keeps ten.
+- Endpoints must be a known push service over https (Google, Mozilla, Apple, Windows): the service sends requests to what browsers hand it, so anything else is refused (`422 PUSH_SUBSCRIPTION_INVALID`). Redirects are not followed.
+- Pushes: `EN_ROUTE` and `DELIVERED` from `delivery.delivery.v1`, a new level or badges from a delivered order's `loyalty.reward.v1`, in the subscription's language. The service worker shows nothing while a tab of the shop is visible (the live stream does that). Encrypted (RFC 8291) and signed (VAPID) with `com.interaso:webpush`; a 404/410 from the push service removes the subscription; any other failure is logged and never fails the event (that would resend its mail).
+- `user.deleted` removes the account's subscriptions; logs name the push service's host only, never the endpoint (a capability URL).
+
 ## Guarantees
 
 - The Kafka consumer (`notification-service` group) writes an inbox row and the delivery log in one transaction with the send: a mail goes out at least once and is not repeated after success.
@@ -37,7 +45,7 @@ Server-sent events for the signed-in user (`Authorization: Bearer …`; the web 
 ## Run
 
 ```bash
-./gradlew build    # tests need Docker (Postgres, Kafka, Mailpit via Testcontainers)
+./gradlew build    # tests need Docker (Postgres, Kafka, Mailpit via Testcontainers); push tests decrypt what a fake push service receives
 ```
 
 In the k3d cluster: `just dev notification-service` from the hub repo.
