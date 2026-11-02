@@ -115,6 +115,30 @@ class PushesTest :
                 )
         }
 
+        test("a test push goes to every device at once, shows with the shop open, and says how each went") {
+            val subscriptions = InMemoryPushSubscriptions()
+            val sender =
+                object : PushSender {
+                    val sent = mutableListOf<PushMessage>()
+
+                    override suspend fun send(
+                        subscription: PushSubscription,
+                        message: PushMessage,
+                    ): PushOutcome {
+                        sent += message
+                        return if (subscription.endpoint.endsWith("forgotten")) PushOutcome.GONE else PushOutcome.SENT
+                    }
+                }
+            val pushes = pushes(subscriptions, sender)
+            pushes.subscribe("ghost", FCM, p256dh, auth, Language.DE)
+            pushes.subscribe("ghost", "$FCM-forgotten", p256dh, auth, Language.EN)
+
+            pushes.test("ghost") shouldBe PushTestResult(sent = 1, gone = 1, failed = 0)
+            sender.sent.map { it.always }.distinct() shouldBe listOf(true)
+            pushes.list("ghost").map { it.endpoint } shouldContainExactly listOf(FCM)
+            pushes.test("nobody") shouldBe PushTestResult(0, 0, 0)
+        }
+
         test("a device the push service forgot is removed, and a failing push never fails the event") {
             val subscriptions = InMemoryPushSubscriptions()
             val sender = RecordingPushSender()

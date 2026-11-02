@@ -34,6 +34,9 @@ class WebPushSenderTest :
             push.headers["authorization"] shouldContain "k=${config.publicKey}"
             browser.decrypt(push.body) shouldBe
                 """{"title":"Nichts ist angekommen","body":"Deine Bestellung ist da.","url":"/orders/o-1","tag":"order-o-1"}"""
+
+            sender.send(subscription(service.endpoint("/push/test")), message.copy(always = true))
+            browser.decrypt(service.received.single { it.path == "/push/test" }.body) shouldContain "\"always\":true"
         }
 
         test("404 and 410 mean the browser is gone; other answers and dead hosts are failures") {

@@ -47,6 +47,8 @@ internal data class PushPayload(
     val body: String,
     val url: String,
     val tag: String,
+    /** Left out unless true (the test push). */
+    val always: Boolean = false,
 )
 
 /**
@@ -70,7 +72,11 @@ class WebPushSender(
         message: PushMessage,
     ): PushOutcome {
         val host = URI(subscription.endpoint).host
-        val payload = Json.encodeToString(PushPayload.serializer(), PushPayload(message.title, message.body, message.url, message.tag))
+        val payload =
+            Json.encodeToString(
+                PushPayload.serializer(),
+                PushPayload(message.title, message.body, message.url, message.tag, message.always),
+            )
         val body = webPush.getBody(payload.toByteArray(), base64Url(subscription.p256dh), base64Url(subscription.auth))
         val request =
             HttpRequest
@@ -84,12 +90,18 @@ class WebPushSender(
                         .forEach { (name, value) -> header(name, value) }
                 }.build()
         return try {
-            val status = http.sendAsync(request, HttpResponse.BodyHandlers.discarding()).await().statusCode()
+            val response = http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
+            val status = response.statusCode()
+            // The push service's own words, for the log: short, on one line, never the endpoint.
+            val reason = { response.body().replace(Regex("\\s+"), " ").take(REASON_LENGTH) }
             when (status) {
                 in SUCCESS -> PushOutcome.SENT
-                NOT_FOUND, GONE -> PushOutcome.GONE
+                NOT_FOUND, GONE -> {
+                    log.info("Push service {} no longer knows a subscription ({}: {}); it is removed", host, status, reason())
+                    PushOutcome.GONE
+                }
                 else -> {
-                    log.warn("Push service {} answered {}", host, status)
+                    log.warn("Push service {} refused a push ({}: {})", host, status, reason())
                     PushOutcome.FAILED
                 }
             }
@@ -107,6 +119,7 @@ class WebPushSender(
         val SUCCESS = 200..299
         const val NOT_FOUND = 404
         const val GONE = 410
+        const val REASON_LENGTH = 300
 
         /** Set by the JDK client itself; it refuses them from callers. */
         val RESTRICTED = setOf("content-length", "host", "connection")

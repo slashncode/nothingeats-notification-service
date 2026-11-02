@@ -56,6 +56,15 @@ data class PushMessage(
     /** A path in the shop, opened when the notification is clicked. */
     val url: String,
     val tag: String,
+    /** Shown even while the shop is open (the test push); others leave that to the live stream. */
+    val always: Boolean = false,
+)
+
+/** What a test push found: devices the push service took it for, forgot, or refused. */
+data class PushTestResult(
+    val sent: Int,
+    val gone: Int,
+    val failed: Int,
 )
 
 enum class PushOutcome { SENT, GONE, FAILED }
@@ -171,6 +180,21 @@ class Pushes(
 
     suspend fun list(userId: String): List<PushSubscription> = subscriptions.forUser(userId)
 
+    /** A push to every device of the user right now, shown even with the shop open; says how each went. */
+    suspend fun test(userId: String): PushTestResult {
+        val outcomes =
+            subscriptions.forUser(userId).map { subscription ->
+                sender.send(subscription, PushTexts.test(subscription.language)).also {
+                    if (it == PushOutcome.GONE) subscriptions.expire(subscription.endpoint)
+                }
+            }
+        return PushTestResult(
+            sent = outcomes.count { it == PushOutcome.SENT },
+            gone = outcomes.count { it == PushOutcome.GONE },
+            failed = outcomes.count { it == PushOutcome.FAILED },
+        )
+    }
+
     suspend fun deliveryChanged(
         userId: String,
         orderId: String,
@@ -213,6 +237,25 @@ class Pushes(
 
 /** The notifications in German and English. Paths point into the shop, never at an API. */
 internal object PushTexts {
+    fun test(language: Language) =
+        if (language == Language.DE) {
+            PushMessage(
+                "So sieht NothingEats auf diesem Gerät aus",
+                "Hier meldet sich der Shop, wenn dein Kurier losfährt und wenn nichts angekommen ist.",
+                "/account",
+                "test",
+                always = true,
+            )
+        } else {
+            PushMessage(
+                "This is NothingEats on this device",
+                "The shop says hello here when your courier leaves and when nothing has arrived.",
+                "/account",
+                "test",
+                always = true,
+            )
+        }
+
     fun delivery(
         language: Language,
         orderId: String,

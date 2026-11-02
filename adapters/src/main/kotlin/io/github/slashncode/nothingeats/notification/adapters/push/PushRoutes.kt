@@ -15,6 +15,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
@@ -48,6 +49,13 @@ internal data class PushSubscriptionResponse(
 )
 
 @Serializable
+internal data class PushTestResponse(
+    val sent: Int,
+    val gone: Int,
+    val failed: Int,
+)
+
+@Serializable
 internal data class PushSubscriptionsResponse(
     val items: List<PushSubscriptionResponse>,
 )
@@ -55,7 +63,8 @@ internal data class PushSubscriptionsResponse(
 /**
  * `/api/notification/v1/push`: the VAPID public key for `pushManager.subscribe` (public; 404
  * `PUSH_DISABLED` without keys), and the signed-in user's subscriptions: list (also for the
- * GDPR download), save, remove (`?endpoint=`, on switching off and on logout).
+ * GDPR download), save, remove (`?endpoint=`, on switching off and on logout), and `POST /test`:
+ * a push to every device now, with how each went.
  */
 class PushRoutes(
     private val pushes: Pushes,
@@ -87,6 +96,10 @@ class PushRoutes(
                         Language.parse(request.language),
                     )
                     call.respond(HttpStatusCode.NoContent)
+                }
+                post("/test") {
+                    val result = pushes.test(call.user.id)
+                    call.respond(PushTestResponse(result.sent, result.gone, result.failed))
                 }
                 delete("/subscriptions") {
                     val endpoint =
