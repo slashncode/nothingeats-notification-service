@@ -41,6 +41,16 @@ class InMemoryPushSubscriptions : PushSubscriptions {
 
     override suspend fun forUser(userId: String) = rows.filter { it.userId == userId }
 
+    override suspend fun byEndpoint(endpoint: String) = rows.find { it.endpoint == endpoint }
+
+    override suspend fun replace(
+        oldEndpoint: String,
+        subscription: PushSubscription,
+    ) {
+        rows.removeIf { it.endpoint == oldEndpoint || it.endpoint == subscription.endpoint }
+        rows += subscription
+    }
+
     override suspend fun delete(
         userId: String,
         endpoint: String,

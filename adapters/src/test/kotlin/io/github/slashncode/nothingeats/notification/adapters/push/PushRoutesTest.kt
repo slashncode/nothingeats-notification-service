@@ -20,6 +20,7 @@ import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -120,6 +121,45 @@ class PushRoutesTest :
                         parameter("endpoint", endpoint)
                     }.status shouldBe HttpStatusCode.NoContent
                 ExposedPushSubscriptions(db).forUser("ghost") shouldHaveSize 0
+            }
+        }
+
+        test("the service worker moves a rotated subscription without a session; the old endpoint is the proof") {
+            pushTest {
+                val old = service.endpoint("/push/rotating-old")
+                val new = service.endpoint("/push/rotating-new")
+                client.put("/api/notification/v1/push/subscriptions") {
+                    bearerAuth(tokens.accessToken(userId = "rotator"))
+                    contentType(ContentType.Application.Json)
+                    setBody(subscription(old, "de"))
+                }
+
+                fun rotation(
+                    from: String,
+                    to: String,
+                ) = """{"oldEndpoint":"$from","endpoint":"$to","keys":{"p256dh":"${browser.p256dh}","auth":"${browser.auth}"}}"""
+
+                // Unknown old endpoints get the same answer and change nothing.
+                client
+                    .post("/api/notification/v1/push/subscriptions/rotation") {
+                        contentType(ContentType.Application.Json)
+                        setBody(rotation(service.endpoint("/push/never-seen"), service.endpoint("/push/hijack")))
+                    }.status shouldBe HttpStatusCode.NoContent
+                client
+                    .post("/api/notification/v1/push/subscriptions/rotation") {
+                        contentType(ContentType.Application.Json)
+                        setBody(rotation(old, "http://identity-service/api/identity/v1/admin/users"))
+                    }.status shouldBe HttpStatusCode.UnprocessableEntity
+                client
+                    .post("/api/notification/v1/push/subscriptions/rotation") {
+                        contentType(ContentType.Application.Json)
+                        setBody(rotation(old, new))
+                    }.status shouldBe HttpStatusCode.NoContent
+
+                val moved = ExposedPushSubscriptions(db).forUser("rotator").single()
+                moved.endpoint shouldBe new
+                moved.language.tag shouldBe "de"
+                ExposedPushSubscriptions(db).byEndpoint(service.endpoint("/push/hijack")) shouldBe null
             }
         }
 

@@ -37,6 +37,14 @@ interface PushSubscriptions {
 
     suspend fun forUser(userId: String): List<PushSubscription>
 
+    suspend fun byEndpoint(endpoint: String): PushSubscription?
+
+    /** Swaps the subscription at [oldEndpoint] for [subscription] in one step. */
+    suspend fun replace(
+        oldEndpoint: String,
+        subscription: PushSubscription,
+    )
+
     /** Removes the user's subscription at [endpoint]; somebody else's stays. */
     suspend fun delete(
         userId: String,
@@ -159,18 +167,26 @@ class Pushes(
         auth: String,
         language: Language,
     ) {
-        val violations =
-            buildList {
-                if (!endpoints.allowed(endpoint)) add(Violation("endpoint", "must be a push service's https URL"))
-                if (base64Url(p256dh)?.let { it.size == P256_KEY_BYTES && it[0] == UNCOMPRESSED } != true) {
-                    add(Violation("keys.p256dh", "must be an uncompressed P-256 public key"))
-                }
-                if (base64Url(auth)?.size != AUTH_BYTES) add(Violation("keys.auth", "must be 16 bytes"))
-            }
-        if (violations.isNotEmpty()) {
-            throw AppError.Invalid(ErrorCode("PUSH_SUBSCRIPTION_INVALID"), "The push subscription is invalid", violations)
-        }
+        validate(endpoint, p256dh, auth)
         subscriptions.save(PushSubscription(endpoint, p256dh, auth, userId, language, clock.instant()), MAX_PER_USER)
+    }
+
+    /**
+     * The browser's push service replaced a subscription (`pushsubscriptionchange` in the service
+     * worker). The worker has no session, so the old endpoint is the proof: a capability URL that
+     * only that browser, its push service and this service know. The new subscription keeps the
+     * owner and the language; an unknown old endpoint changes nothing. Says whether one moved.
+     */
+    suspend fun rotate(
+        oldEndpoint: String,
+        endpoint: String,
+        p256dh: String,
+        auth: String,
+    ): Boolean {
+        validate(endpoint, p256dh, auth)
+        val old = subscriptions.byEndpoint(oldEndpoint) ?: return false
+        subscriptions.replace(oldEndpoint, old.copy(endpoint = endpoint, p256dh = p256dh, auth = auth, createdAt = clock.instant()))
+        return true
     }
 
     suspend fun unsubscribe(
@@ -221,6 +237,24 @@ class Pushes(
             throw e
         } catch (e: Exception) {
             log.warn("Push for an event failed; the event is handled anyway", e)
+        }
+    }
+
+    private fun validate(
+        endpoint: String,
+        p256dh: String,
+        auth: String,
+    ) {
+        val violations =
+            buildList {
+                if (!endpoints.allowed(endpoint)) add(Violation("endpoint", "must be a push service's https URL"))
+                if (base64Url(p256dh)?.let { it.size == P256_KEY_BYTES && it[0] == UNCOMPRESSED } != true) {
+                    add(Violation("keys.p256dh", "must be an uncompressed P-256 public key"))
+                }
+                if (base64Url(auth)?.size != AUTH_BYTES) add(Violation("keys.auth", "must be 16 bytes"))
+            }
+        if (violations.isNotEmpty()) {
+            throw AppError.Invalid(ErrorCode("PUSH_SUBSCRIPTION_INVALID"), "The push subscription is invalid", violations)
         }
     }
 

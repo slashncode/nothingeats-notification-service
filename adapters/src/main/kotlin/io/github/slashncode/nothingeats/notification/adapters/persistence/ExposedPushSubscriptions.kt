@@ -64,6 +64,32 @@ class ExposedPushSubscriptions(
                 .map { it.toSubscription() }
         }
 
+    override suspend fun byEndpoint(endpoint: String): PushSubscription? =
+        db.transaction(readOnly = true) {
+            PushSubscriptionsTable
+                .selectAll()
+                .where { PushSubscriptionsTable.endpoint eq endpoint }
+                .singleOrNull()
+                ?.toSubscription()
+        }
+
+    override suspend fun replace(
+        oldEndpoint: String,
+        subscription: PushSubscription,
+    ) {
+        db.transaction {
+            PushSubscriptionsTable.deleteWhere { PushSubscriptionsTable.endpoint eq oldEndpoint }
+            PushSubscriptionsTable.upsert {
+                it[endpoint] = subscription.endpoint
+                it[userId] = subscription.userId
+                it[p256dh] = subscription.p256dh
+                it[auth] = subscription.auth
+                it[language] = subscription.language.tag
+                it[createdAt] = subscription.createdAt
+            }
+        }
+    }
+
     override suspend fun delete(
         userId: String,
         endpoint: String,

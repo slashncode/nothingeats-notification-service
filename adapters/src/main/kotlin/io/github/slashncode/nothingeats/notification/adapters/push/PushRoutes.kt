@@ -19,6 +19,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 import java.net.URI
 
 @Serializable
@@ -38,6 +39,14 @@ internal data class PushSubscriptionRequest(
     val endpoint: String,
     val keys: PushKeysRequest,
     val language: String? = null,
+)
+
+/** From the service worker's `pushsubscriptionchange`: the old endpoint and the new subscription. */
+@Serializable
+internal data class PushRotationRequest(
+    val oldEndpoint: String,
+    val endpoint: String,
+    val keys: PushKeysRequest,
 )
 
 /** One of the user's devices: which push service, not the endpoint (a capability URL). */
@@ -64,18 +73,32 @@ internal data class PushSubscriptionsResponse(
  * `/api/notification/v1/push`: the VAPID public key for `pushManager.subscribe` (public; 404
  * `PUSH_DISABLED` without keys), and the signed-in user's subscriptions: list (also for the
  * GDPR download), save, remove (`?endpoint=`, on switching off and on logout), and `POST /test`:
- * a push to every device now, with how each went.
+ * a push to every device now, with how each went. `POST /subscriptions/rotation` is public: the
+ * service worker has no session, and the old endpoint proves the browser (see [Pushes.rotate]).
+ * It answers 204 whether or not the old endpoint was known, so it tells a caller nothing.
  */
 class PushRoutes(
     private val pushes: Pushes,
     private val publicKey: String?,
 ) : HttpRoutes {
+    private val log = LoggerFactory.getLogger(PushRoutes::class.java)
+
     override fun Route.register() {
         route("/api/notification/v1/push") {
             public {
                 get("/key") {
                     val key = publicKey ?: throw AppError.NotFound(ErrorCode("PUSH_DISABLED"), "Push notifications are not set up")
                     call.respond(PushKeyResponse(key))
+                }
+                post("/subscriptions/rotation") {
+                    val request = call.receive<PushRotationRequest>()
+                    val moved = pushes.rotate(request.oldEndpoint, request.endpoint, request.keys.p256dh, request.keys.auth)
+                    log.info(
+                        "Push subscription rotation at {}: {}",
+                        URI(request.endpoint).host,
+                        if (moved) "moved" else "old endpoint unknown",
+                    )
+                    call.respond(HttpStatusCode.NoContent)
                 }
             }
             authenticated {

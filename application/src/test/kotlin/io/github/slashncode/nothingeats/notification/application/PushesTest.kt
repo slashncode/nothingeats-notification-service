@@ -47,6 +47,20 @@ class PushesTest :
             endpoints.allowed("not a url") shouldBe false
         }
 
+        test("a rotated subscription keeps its owner and language; an unknown old endpoint moves nothing") {
+            val subscriptions = InMemoryPushSubscriptions()
+            val pushes = pushes(subscriptions)
+            pushes.subscribe("ghost", FCM, p256dh, auth, Language.DE)
+            val next = "https://fcm.googleapis.com/fcm/send/def"
+
+            shouldThrow<AppError.Invalid> { pushes.rotate(FCM, "http://valkey:6379/", p256dh, auth) }
+            pushes.rotate("https://fcm.googleapis.com/fcm/send/unknown", next, p256dh, auth) shouldBe false
+            pushes.rotate(FCM, next, p256dh, auth) shouldBe true
+
+            pushes.list("ghost").map { it.endpoint to it.language } shouldContainExactly listOf(next to Language.DE)
+            subscriptions.byEndpoint(FCM) shouldBe null
+        }
+
         test("a subscription needs a known endpoint and real keys; a browser keeps one row, a user ten") {
             val subscriptions = InMemoryPushSubscriptions()
             val pushes = pushes(subscriptions)
