@@ -54,12 +54,12 @@ class ReplayIdentityTask(
 
     private fun consumer() =
         KafkaConsumer(
-            mapOf<String, Any>(
-                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to kafka.bootstrapServers,
-                ConsumerConfig.CLIENT_ID_CONFIG to "notification-service-replay",
-                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to false,
-                ConsumerConfig.ISOLATION_LEVEL_CONFIG to "read_committed",
-            ),
+            kafka.connection() +
+                mapOf(
+                    ConsumerConfig.CLIENT_ID_CONFIG to "notification-service-replay",
+                    ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to false,
+                    ConsumerConfig.ISOLATION_LEVEL_CONFIG to "read_committed",
+                ),
             StringDeserializer(),
             ByteArrayDeserializer(),
         )
